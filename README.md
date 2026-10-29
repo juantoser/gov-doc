@@ -33,6 +33,12 @@ npm test
 npm run build
 ```
 
+## Azure demo
+
+A public demo is hosted on Azure Container Apps: [Open Civic Services](https://ca-gov-doc-dev-0d63.politesmoke-ec4bb5fd.westeurope.azurecontainerapps.io/). It is the same synthetic, browser-only mock described above; it does not receive or process uploaded file contents. **Do not enter real personal, financial, or government information.**
+
+The container is built from `Dockerfile` and the Azure resources are defined in `infra/`. The GitHub Actions workflows are designed to run CI on every PR and deploy an isolated preview for same-repository PRs after checks pass; fork PRs receive CI only. Merges to `main` update the stable demo. The workflows become active after they are pushed to the default branch and the repository variables are configured. See [the pipeline setup guide](.azure/pipeline-setup.md) for its OIDC and repository-variable configuration.
+
 ## Later stages
 
-Azure Container Apps deployment and Foundry-hosted workflows are intentionally out of scope for this mock. A future backend can replace the typed application-service interface with an API. Before introducing real document processing, add server-side upload handling, appropriate access controls, secure storage, and explicit human-review boundaries. Do not put credentials or real decision logic in the browser.
+Foundry-hosted workflows and a backend can be added later. A future backend can replace the typed application-service interface with an API. Before introducing real document processing, add server-side upload handling, appropriate access controls, secure storage, and explicit human-review boundaries. Do not put credentials or real decision logic in the browser.

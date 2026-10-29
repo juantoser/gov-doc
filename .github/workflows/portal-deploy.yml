@@ -1,0 +1,289 @@
+name: Portal deployment
+
+on:
+  workflow_run:
+    workflows:
+      - Portal CI
+    types:
+      - completed
+
+concurrency:
+  group: portal-deployment-${{ github.event.workflow_run.head_branch || github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      target: ${{ steps.target.outputs.target }}
+      pr-number: ${{ steps.target.outputs.pr-number }}
+      pr-state: ${{ steps.target.outputs.pr-state }}
+      head-sha: ${{ steps.target.outputs.head-sha }}
+    steps:
+      - name: Resolve trusted deployment target
+        id: target
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const repository = context.payload.repository.full_name;
+            core.setOutput('head-sha', run.head_sha);
+
+            if (run.event === 'push' && run.head_branch === 'main') {
+              core.setOutput('target', 'main');
+              return;
+            }
+
+            if (run.event !== 'pull_request' || run.head_repository?.full_name !== repository) {
+              core.setOutput('target', 'ignore');
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const associated = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: run.head_sha,
+            });
+            const pr = associated.data.find((item) =>
+              item.base.repo?.full_name === repository &&
+              item.head.repo?.full_name === repository
+            );
+
+            if (!pr) {
+              core.setOutput('target', 'ignore');
+              return;
+            }
+
+            core.setOutput('pr-number', String(pr.number));
+            core.setOutput('pr-state', pr.state);
+            core.setOutput('target', pr.state === 'open' ? 'preview' : 'cleanup');
+
+  deploy-main:
+    needs: resolve
+    if: needs.resolve.outputs.target == 'main' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out trusted deployment files
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: source
+
+      - name: Download image from completed CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: portal-image
+          path: artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Push image and deploy stable app
+        id: deploy
+        working-directory: source
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_CONTAINER_REGISTRY: ${{ vars.AZURE_CONTAINER_REGISTRY }}
+          AZURE_REGISTRY_LOGIN_SERVER: ${{ vars.AZURE_REGISTRY_LOGIN_SERVER }}
+          AZURE_IMAGE_REPOSITORY: ${{ vars.AZURE_IMAGE_REPOSITORY }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          AZURE_CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
+          AZURE_MANAGED_ENVIRONMENT: ${{ vars.AZURE_MANAGED_ENVIRONMENT }}
+          AZURE_PULL_IDENTITY: ${{ vars.AZURE_PULL_IDENTITY }}
+          AZURE_ENVIRONMENT_NAME: ${{ vars.AZURE_ENVIRONMENT_NAME }}
+          AZURE_SESSION_ID: ${{ vars.AZURE_SESSION_ID }}
+          IMAGE_SOURCE_SHA: ${{ needs.resolve.outputs.head-sha }}
+          APP_NAME: ${{ vars.AZURE_CONTAINER_APP }}
+          PULL_REQUEST_NUMBER: "0"
+        run: |
+          docker load --input ../artifact/gov-doc-portal.tar
+          image="${AZURE_REGISTRY_LOGIN_SERVER}/${AZURE_IMAGE_REPOSITORY}:sha-${IMAGE_SOURCE_SHA}"
+          docker tag gov-doc-portal:ci "$image"
+          az acr login --name "$AZURE_CONTAINER_REGISTRY" --subscription "$AZURE_SUBSCRIPTION_ID"
+          docker push "$image"
+          created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          deployment_name="portal-main-${IMAGE_SOURCE_SHA:0:8}"
+          export APP_IMAGE="$image" CREATED_AT="$created_at" DEPLOYMENT_NAME="$deployment_name"
+          bash scripts/deploy-containerapp.sh
+
+      - name: Add deployment URL to summary
+        env:
+          APP_URL: ${{ steps.deploy.outputs.app-url }}
+        run: 'echo "Stable demo: ${APP_URL}" >> "$GITHUB_STEP_SUMMARY"'
+
+  deploy-preview:
+    needs: resolve
+    if: needs.resolve.outputs.target == 'preview' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      issues: write
+      pull-requests: read
+    outputs:
+      app-url: ${{ steps.deploy.outputs.app-url }}
+    steps:
+      - name: Check out trusted deployment files
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: source
+
+      - name: Download image from completed CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: portal-image
+          path: artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Push image and deploy isolated preview
+        id: deploy
+        working-directory: source
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_CONTAINER_REGISTRY: ${{ vars.AZURE_CONTAINER_REGISTRY }}
+          AZURE_REGISTRY_LOGIN_SERVER: ${{ vars.AZURE_REGISTRY_LOGIN_SERVER }}
+          AZURE_IMAGE_REPOSITORY: ${{ vars.AZURE_IMAGE_REPOSITORY }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          AZURE_CONTAINER_APP: ${{ vars.AZURE_CONTAINER_APP }}
+          AZURE_PREVIEW_APP_PREFIX: ${{ vars.AZURE_PREVIEW_APP_PREFIX }}
+          AZURE_MANAGED_ENVIRONMENT: ${{ vars.AZURE_MANAGED_ENVIRONMENT }}
+          AZURE_PULL_IDENTITY: ${{ vars.AZURE_PULL_IDENTITY }}
+          AZURE_ENVIRONMENT_NAME: ${{ vars.AZURE_ENVIRONMENT_NAME }}
+          AZURE_SESSION_ID: ${{ vars.AZURE_SESSION_ID }}
+          IMAGE_SOURCE_SHA: ${{ needs.resolve.outputs.head-sha }}
+          APP_NAME: ${{ vars.AZURE_PREVIEW_APP_PREFIX }}${{ needs.resolve.outputs.pr-number }}
+          PULL_REQUEST_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+        run: |
+          docker load --input ../artifact/gov-doc-portal.tar
+          image="${AZURE_REGISTRY_LOGIN_SERVER}/${AZURE_IMAGE_REPOSITORY}:pr-${PULL_REQUEST_NUMBER}-${IMAGE_SOURCE_SHA}"
+          docker tag gov-doc-portal:ci "$image"
+          az acr login --name "$AZURE_CONTAINER_REGISTRY" --subscription "$AZURE_SUBSCRIPTION_ID"
+          docker push "$image"
+          created_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          deployment_name="portal-pr-${PULL_REQUEST_NUMBER}-${IMAGE_SOURCE_SHA:0:8}"
+          export APP_IMAGE="$image" CREATED_AT="$created_at" DEPLOYMENT_NAME="$deployment_name"
+          bash scripts/deploy-containerapp.sh
+
+      - name: Add or update PR preview comment
+        uses: actions/github-script@v7
+        env:
+          APP_URL: ${{ steps.deploy.outputs.app-url }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const marker = '<!-- gov-doc-preview -->';
+            const body = `${marker}\n### Civic Services preview\n\n${process.env.APP_URL}\n\nThis isolated preview uses synthetic demo behavior only.`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === 'Bot' && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  cleanup-preview:
+    needs: resolve
+    if: needs.resolve.outputs.target == 'cleanup'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Check out trusted deployment files
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: source
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete only this PR preview app
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_PREVIEW_APP_PREFIX: ${{ vars.AZURE_PREVIEW_APP_PREFIX }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+        run: |
+          app_name="${AZURE_PREVIEW_APP_PREFIX}${PR_NUMBER}"
+          if az containerapp show --name "$app_name" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" --query name -o tsv >/dev/null 2>&1; then
+            az containerapp delete --name "$app_name" --resource-group "$AZURE_RESOURCE_GROUP" --subscription "$AZURE_SUBSCRIPTION_ID" --yes
+          fi
+
+      - name: Mark preview as removed
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const marker = '<!-- gov-doc-preview -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === 'Bot' && comment.body.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: `${marker}\n### Civic Services preview removed\n\nThis PR's isolated preview app was deleted.`,
+              });
+            }

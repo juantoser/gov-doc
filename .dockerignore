@@ -1,0 +1,16 @@
+.git
+.github
+.copilot-azure
+.azure
+.vite
+coverage
+dist
+infra
+node_modules
+__pycache__
+*.pyc
+*.md
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
