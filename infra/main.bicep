@@ -77,7 +77,9 @@ module platform './modules/platform.bicep' = {
     location: location
     tags: tags
     githubOwner: 'juantoser'
+    githubOwnerId: '136793699'
     githubRepo: 'gov-doc'
+    githubRepositoryId: '1438404968'
     registryName: containerRegistryName
     workspaceName: logAnalyticsWorkspaceName
     managedEnvironmentName: managedEnvironmentResourceName

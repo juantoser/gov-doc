@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Resolve trusted deployment target
         id: target
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -75,13 +75,13 @@ jobs:
       id-token: write
     steps:
       - name: Check out trusted deployment files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           path: source
 
       - name: Download image from completed CI run
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: portal-image
           path: artifact
@@ -90,7 +90,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Sign in to Azure with OIDC
-        uses: azure/login@v2
+        uses: Azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -144,13 +144,13 @@ jobs:
       app-url: ${{ steps.deploy.outputs.app-url }}
     steps:
       - name: Check out trusted deployment files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           path: source
 
       - name: Download image from completed CI run
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: portal-image
           path: artifact
@@ -159,7 +159,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Sign in to Azure with OIDC
-        uses: azure/login@v2
+        uses: Azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -196,7 +196,7 @@ jobs:
           bash scripts/deploy-containerapp.sh
 
       - name: Add or update PR preview comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           APP_URL: ${{ steps.deploy.outputs.app-url }}
           PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
@@ -237,13 +237,13 @@ jobs:
       pull-requests: read
     steps:
       - name: Check out trusted deployment files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           path: source
 
       - name: Sign in to Azure with OIDC
-        uses: azure/login@v2
+        uses: Azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -262,7 +262,7 @@ jobs:
           fi
 
       - name: Mark preview as removed
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PR_NUMBER: ${{ needs.resolve.outputs.pr-number }}
         with:

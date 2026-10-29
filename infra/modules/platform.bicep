@@ -1,6 +1,8 @@
 param location string
 param githubOwner string
+param githubOwnerId string
 param githubRepo string
+param githubRepositoryId string
 param tags object
 param registryName string
 param workspaceName string
@@ -56,7 +58,7 @@ resource githubMainCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/
   name: 'github-main'
   properties: {
     issuer: 'https://token.actions.githubusercontent.com'
-    subject: 'repo:${githubOwner}/${githubRepo}:ref:refs/heads/main'
+    subject: 'repo:${githubOwner}@${githubOwnerId}/${githubRepo}@${githubRepositoryId}:ref:refs/heads/main'
     audiences: [
       'api://AzureADTokenExchange'
     ]
