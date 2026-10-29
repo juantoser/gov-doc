@@ -51,10 +51,25 @@ jobs:
               repo,
               commit_sha: run.head_sha,
             });
-            const pr = associated.data.find((item) =>
+            let pr = associated.data.find((item) =>
               item.base.repo?.full_name === repository &&
               item.head.repo?.full_name === repository
             );
+
+            if (!pr && run.head_branch) {
+              const { data: branchPullRequests } = await github.rest.pulls.list({
+                owner,
+                repo,
+                state: 'all',
+                head: `${owner}:${run.head_branch}`,
+                per_page: 100,
+              });
+              pr = branchPullRequests.find((item) =>
+                item.head.sha === run.head_sha &&
+                item.base.repo?.full_name === repository &&
+                item.head.repo?.full_name === repository
+              );
+            }
 
             if (!pr) {
               core.setOutput('target', 'ignore');
