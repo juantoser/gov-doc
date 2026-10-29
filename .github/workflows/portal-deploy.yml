@@ -138,8 +138,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
-      issues: write
-      pull-requests: read
+      pull-requests: write
     outputs:
       app-url: ${{ steps.deploy.outputs.app-url }}
     steps:
@@ -233,8 +232,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      issues: write
-      pull-requests: read
+      pull-requests: write
     steps:
       - name: Check out trusted deployment files
         uses: actions/checkout@v7
