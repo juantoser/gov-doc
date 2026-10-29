@@ -37,7 +37,9 @@ npm run build
 
 A public demo is hosted on Azure Container Apps: [Open Civic Services](https://ca-gov-doc-dev-0d63.politesmoke-ec4bb5fd.westeurope.azurecontainerapps.io/). It is the same synthetic, browser-only mock described above; it does not receive or process uploaded file contents. **Do not enter real personal, financial, or government information.**
 
-The container is built from `Dockerfile` and the Azure resources are defined in `infra/`. The GitHub Actions workflows are designed to run CI on every PR and deploy an isolated preview for same-repository PRs after checks pass; fork PRs receive CI only. Merges to `main` update the stable demo. The workflows become active after they are pushed to the default branch and the repository variables are configured. See [the pipeline setup guide](.azure/pipeline-setup.md) for its OIDC and repository-variable configuration.
+The container is built from `Dockerfile` and the Azure resources are defined in `infra/`. GitHub Actions runs CI on every PR and deploys an isolated preview for same-repository PRs after checks pass; fork PRs receive CI only. Merges to `main` update the stable demo. See [the pipeline setup guide](.azure/pipeline-setup.md) for its OIDC and repository-variable configuration.
+
+Each successful same-repository PR receives a temporary preview link in a PR comment. Closing the PR deletes that preview app.
 
 ## Later stages
 
