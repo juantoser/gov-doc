@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   resolve:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
@@ -68,7 +68,7 @@ jobs:
   deploy-main:
     needs: resolve
     if: needs.resolve.outputs.target == 'main' && github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -133,7 +133,7 @@ jobs:
   deploy-preview:
     needs: resolve
     if: needs.resolve.outputs.target == 'preview' && github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -229,7 +229,7 @@ jobs:
   cleanup-preview:
     needs: resolve
     if: needs.resolve.outputs.target == 'cleanup'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
